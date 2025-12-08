@@ -81,7 +81,7 @@ wget https://download.mikrotik.com/routeros/$VERSION/mikrotik-$VERSION.iso
 wget https://download.mikrotik.com/routeros/$VERSION/install-image-$VERSION.zip
 wget https://download.mikrotik.com/routeros/$VERSION/chr-$VERSION.img.zip
 wget https://nchc.dl.sourceforge.net/project/refind/0.14.2/refind-bin-0.14.2.zip
-git clone -b main --single-branch --depth=1 https://github.com/ahmadwhet/MikroTikPatch
+git clone -b main --single-branch --depth=1 https://github.com/madskid/MikroTikPatch
 unzip install-image-$VERSION.zip
 unzip chr-$VERSION.img.zip
 unzip refind-bin-0.14.2.zip refind-bin-0.14.2/refind/refind_x64.efi
