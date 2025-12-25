@@ -202,3 +202,24 @@ python3 patch.py netinstall netinstall.exe
 zip netinstall-$VERSION-patched.zip netinstall.exe
 rm netinstall-$VERSION.zip netinstall.exe LICENSE.txt
 ```
+
+
+## Patch MIPSBE (Only work until v7.17)
+
+```
+wget https://download.mikrotik.com/routeros/$VERSION/routeros-$VERSION-mipsbe.npk
+wget https://download.mikrotik.com/routeros/$VERSION/all_packages-mipsbe-$VERSION.zip
+mkdir ./all_packages-mipsbe
+unzip all_packages-mipsbe-$VERSION.zip -d ./all_packages-mipsbe/
+python3 patch.py npk routeros-$VERSION-mipsbe.npk
+mv routeros-$VERSION-mipsbe.npk routeros-$VERSION-mipsbe-patched.npk
+rm all_packages-mipsbe-$VERSION.zip
+NPK_FILES=$(find ./all_packages-mipsbe/*.npk)
+for file in $NPK_FILES; do
+  python3 npk-mipsbe.py sign $file $file
+done
+cd ./all_packages-mipsbe
+zip ../all_packages-mipsbe-$VERSION-patched.zip *.npk
+cd ../
+rm -rf ./all_packages-mipsbe
+```
