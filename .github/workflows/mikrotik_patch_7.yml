@@ -12,17 +12,17 @@ on:
         options:
           - x86
           - arm64
-          - arm
       channel:
-        description: 'Channel (stable, testing)'
+        description: 'Channel (stable, testing, longterm)'
         required: true
         default: 'stable'
         type: choice
         options:
           - stable
           - testing
+          - longterm
       version:
-        description: "Specify version (e.g., 7.20.2), empty for latest"
+        description: "Specify version (e.g., 7.20.6), empty for latest"
         required: false
         default: ''
         type: string
