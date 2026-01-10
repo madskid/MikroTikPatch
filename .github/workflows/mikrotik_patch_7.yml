@@ -474,5 +474,6 @@ jobs:
         name: mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}
         path: |
           all_packages-*-${{ env.LATEST_VERSION }}.zip
+          all_packages-${{ env.LATEST_VERSION }}.zip
           mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
           chr-${{ env.LATEST_VERSION }}*.zip
