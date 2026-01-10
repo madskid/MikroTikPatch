@@ -20,7 +20,7 @@ on:
         options:
           - stable
           - testing
-          - longterm
+          - long-term
       version:
         description: "Specify version (e.g., 7.20.6), empty for latest"
         required: false
@@ -86,8 +86,8 @@ jobs:
           else
             BUILD_TIME=$(date +'%s')
             RELEASE=true
-            MATRIX_JSON='[{"arch":"x86","channel":"stable"},{"arch":"arm64","channel":"stable"},{"arch":"arm","channel":"stable"}]'
-            MATRIX_JSON='[{"arch":"x86","channel":"stable"},{"arch":"arm64","channel":"stable"}]'
+            MATRIX_JSON='[{"arch":"x86","channel":"stable"},{"arch":"arm64","channel":"stable"},{"arch":"arm","channel":"stable"},{"arch":"x86","channel":"testing"},{"arch":"arm64","channel":"testing"},{"arch":"arm","channel":"testing"}]'
+            MATRIX_JSON='[{"arch":"x86","channel":"stable"},{"arch":"arm64","channel":"stable"},{"arch":"x86","channel":"long-term"},{"arch":"arm64","channel":"long-term"},{"arch":"x86","channel":"testing"},{"arch":"arm64","channel":"testing"}]'
           fi
           echo "BUILD_TIME=$BUILD_TIME" >> $GITHUB_OUTPUT
           echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
