@@ -160,7 +160,7 @@ jobs:
     - name: Get loader patch files
       if: steps.get_latest.outputs.has_new_version == 'true'
       run: |
-        wget -nv -O loader-$LATEST_VERSION.zip https://${{ env.LOADER_URL }}/loader-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
+        wget -nv -O loader-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip https://${{ env.LOADER_URL }}/loader-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
         sudo apt-get install -y p7zip-full > /dev/null
         7z x -p"${{ secrets.LOADER_PASSWORD }}" loader-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip >> /dev/null
         rm loader-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
