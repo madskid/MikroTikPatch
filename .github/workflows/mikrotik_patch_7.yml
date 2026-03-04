@@ -357,36 +357,36 @@ jobs:
         sudo rm chr-$LATEST_VERSION$ARCH.vdi
         sudo rm chr-$LATEST_VERSION$ARCH.img
 
- #   - name: Cache NetInstall ${{ env.LATEST_VERSION }}
- #     if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
- #     id: cache_netinstall
- #     uses: actions/cache@v4
- #     with:
- #       path: |
- #         netinstall.zip
- #         netinstall64.zip
- #         netinstall.tar.gz
- #       key: netinstall-${{ env.LATEST_VERSION }}
+    - name: Cache NetInstall ${{ env.LATEST_VERSION }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      id: cache_netinstall
+      uses: actions/cache@v4
+      with:
+        path: |
+          netinstall.zip
+          netinstall64.zip
+          netinstall.tar.gz
+        key: netinstall-${{ env.LATEST_VERSION }}
 
- #   - name: Get netinstall ${{ env.LATEST_VERSION }}
- #     if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && steps.cache_netinstall.outputs.cache-hit != 'true'
- #     run: |
- #       sudo curl -s -o netinstall.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall-$LATEST_VERSION.zip
- #       sudo curl -s -o netinstall64.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall64-$LATEST_VERSION.zip
- #       sudo curl -s -o netinstall.tar.gz https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall-$LATEST_VERSION.tar.gz
+    - name: Get netinstall ${{ env.LATEST_VERSION }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && steps.cache_netinstall.outputs.cache-hit != 'true'
+      run: |
+        sudo curl -s -o netinstall.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall-$LATEST_VERSION.zip
+        sudo curl -s -o netinstall64.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall64-$LATEST_VERSION.zip
+        sudo curl -s -o netinstall.tar.gz https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall-$LATEST_VERSION.tar.gz
 
- #   - name: Patch netinstall ${{ env.LATEST_VERSION }}
- #     if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
- #     run: |
- #       sudo unzip netinstall.zip netinstall.exe
- #       sudo -E python3 patch.py netinstall netinstall.exe
- #       sudo zip netinstall-$LATEST_VERSION.zip netinstall.exe
- #       sudo unzip netinstall64.zip netinstall64.exe
- #       sudo -E python3 patch.py netinstall netinstall64.exe
- #       sudo zip netinstall64-$LATEST_VERSION.zip netinstall64.exe
- #       sudo tar -xvf netinstall.tar.gz
- #       sudo -E python3 patch.py netinstall netinstall-cli
- #       sudo tar -czvf netinstall-$LATEST_VERSION.tar.gz netinstall-cli
+    - name: Patch netinstall ${{ env.LATEST_VERSION }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      run: |
+        sudo unzip netinstall.zip netinstall.exe
+        sudo -E python3 patch.py netinstall netinstall.exe
+        sudo zip netinstall-$LATEST_VERSION.zip netinstall.exe
+        sudo unzip netinstall64.zip netinstall64.exe
+        sudo -E python3 patch.py netinstall netinstall64.exe
+        sudo zip netinstall64-$LATEST_VERSION.zip netinstall64.exe
+        sudo tar -xvf netinstall.tar.gz
+        sudo -E python3 patch.py netinstall netinstall-cli
+        sudo tar -czvf netinstall-$LATEST_VERSION.tar.gz netinstall-cli
 
     - name: Cache routeros-${{ env.LATEST_VERSION }}${{ env.ARCH }}.npk & all_packages${{ env.ARCH }}-${{ env.LATEST_VERSION }}.zip
       if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch != 'x86'
