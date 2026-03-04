@@ -308,26 +308,26 @@ def patch_kernel(data:bytes,key_dict):
     else:
         raise Exception('unknown kernel format')
 
-def patch_loader(loader_file):
-    try:
-        from package import check_install_package
-        check_install_package(['pyelftools'])
-        from loader.patch_loader import patch_loader as do_patch_loader
-        arch = os.getenv('ARCH') or 'x86'
-        arch = arch.replace('-', '')
-        do_patch_loader(loader_file,loader_file,arch)
-    except ImportError as e:
-        print(e)
-        print("loader module import failed. cannot run patch_loader.py")
+#def patch_loader(loader_file):
+#    try:
+#        from package import check_install_package
+#        check_install_package(['pyelftools'])
+#        from loader.patch_loader import patch_loader as do_patch_loader
+#        arch = os.getenv('ARCH') or 'x86'
+#        arch = arch.replace('-', '')
+#        do_patch_loader(loader_file,loader_file,arch)
+#    except ImportError as e:
+#        print(e)
+#        print("loader module import failed. cannot run patch_loader.py")
         
 def patch_squashfs(path,key_dict):
     for root, dirs, files in os.walk(path):
         for _file in files:
             file = os.path.join(root,_file)
             if os.path.isfile(file):
-                if _file =='loader':
-                    patch_loader(file)
-                    continue
+               # if _file =='loader':
+               #     patch_loader(file)
+               #     continue
                 if _file =='BOOTX64.EFI':
                     print(f'patch {file} ...')
                     data = open(file,'rb').read()
@@ -467,3 +467,7 @@ if __name__ == '__main__':
 
 
     
+
+
+
+
