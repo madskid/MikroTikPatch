@@ -269,7 +269,7 @@ def patch_netinstall(key_dict: dict,input_file,output_file=None):
                 text_section_addr = addr
                 text_section_offset = offset
                 break
-        offset = re.search(rb'\x83\x00\x00\x00.{12}\x8A\x00\x00\x00.{12}\x81\x00\x00\x00.{12}',netinstall).start()
+        offset = re.search(rb'\x83\x00\x00\x00.{12}\x8A\x00\x00\x00.{12}\x81\x00\x00\x00.{12}',netinstall,re.DOTALL).start()
         print(f'found bootloaders offset {hex(offset)}')
         for i in range(10):
             id,name_ptr,data_ptr,data_size = struct.unpack_from('<IIII',netinstall[offset+i*16:offset+i*16+16])
@@ -467,6 +467,7 @@ if __name__ == '__main__':
 
 
     
+
 
 
 
