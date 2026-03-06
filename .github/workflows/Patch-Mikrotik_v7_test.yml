@@ -1,0 +1,479 @@
+name: Patch Mikrotik RouterOS 7.x - TEST
+on:
+  # push:
+  #   branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Architecture (x86, arm64)'
+        required: true
+        default: 'x86'
+        type: choice
+        options:
+          - x86
+          - arm64
+      channel:
+        description: 'Channel (stable, testing, longterm)'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - testing
+          - long-term
+      version:
+        description: "Specify version (e.g., 7.20.6), empty for latest"
+        required: false
+        default: ''
+        type: string
+      buildtime:
+        description: "Custom build time, leave empty for now"
+        required: false
+        default: ''
+        type: string
+      release:
+        description: "Release to GitHub & Upload "
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  CUSTOM_LICENSE_PRIVATE_KEY: ${{ secrets.CUSTOM_LICENSE_PRIVATE_KEY }}
+  CUSTOM_LICENSE_PUBLIC_KEY: ${{ secrets.CUSTOM_LICENSE_PUBLIC_KEY }}
+  CUSTOM_NPK_SIGN_PRIVATE_KEY: ${{ secrets.CUSTOM_NPK_SIGN_PRIVATE_KEY }}
+  CUSTOM_NPK_SIGN_PUBLIC_KEY: ${{ secrets.CUSTOM_NPK_SIGN_PUBLIC_KEY }}
+  CUSTOM_CLOUD_PUBLIC_KEY: ${{ secrets.CUSTOM_CLOUD_PUBLIC_KEY }}
+  MIKRO_LICENSE_PUBLIC_KEY: ${{ secrets.MIKRO_LICENSE_PUBLIC_KEY }}
+  MIKRO_NPK_SIGN_PUBLIC_KEY: ${{ secrets.MIKRO_NPK_SIGN_PUBLIC_KEY }}
+  MIKRO_CLOUD_PUBLIC_KEY: ${{ secrets.MIKRO_CLOUD_PUBLIC_KEY }}
+  MIKRO_LICENCE_URL: ${{ secrets.MIKRO_LICENCE_URL }}
+  CUSTOM_LICENCE_URL: ${{ secrets.CUSTOM_LICENCE_URL }}
+  MIKRO_UPGRADE_URL: ${{ secrets.MIKRO_UPGRADE_URL }}
+  CUSTOM_UPGRADE_URL: ${{ secrets.CUSTOM_UPGRADE_URL }}
+  MIKRO_RENEW_URL: ${{ secrets.MIKRO_RENEW_URL }}
+  CUSTOM_RENEW_URL: ${{ secrets.CUSTOM_RENEW_URL }}
+  MIKRO_CLOUD_URL: ${{ secrets.MIKRO_CLOUD_URL }}
+  CUSTOM_CLOUD_URL: ${{ secrets.CUSTOM_CLOUD_URL }}
+  LOADER_URL: ${{ secrets.LOADER_URL }}
+  LOADER_PASSWORD: ${{ secrets.LOADER_PASSWORD }}
+
+jobs:
+  Set_Variables:
+    runs-on: ubuntu-22.04
+    outputs:
+      BUILD_TIME: ${{ steps.set_vars.outputs.BUILD_TIME }}
+      RELEASE: ${{ steps.set_vars.outputs.RELEASE }}
+      MATRIX_JSON: ${{ steps.set_vars.outputs.MATRIX_JSON }}
+    steps:
+      - name: Set variables
+        id: set_vars
+        run: | 
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BUILD_TIME="${{ github.event.inputs.buildtime }}"
+            RELEASE="${{ github.event.inputs.release }}"
+            if [ -z "$BUILD_TIME" ]; then
+              BUILD_TIME=$(date +'%s')
+            fi
+            if [ -z "$RELEASE" ]; then
+              RELEASE=false
+            fi
+            ARCH="${{ github.event.inputs.arch }}"
+            CHANNEL="${{ github.event.inputs.channel }}"
+            MATRIX_JSON=$(jq -nc --arg arch "$ARCH" --arg channel "$CHANNEL" '[{arch: $arch, channel: $channel}]')
+          else
+            BUILD_TIME=$(date +'%s')
+            RELEASE=true
+            MATRIX_JSON='[{"arch":"x86","channel":"stable"},{"arch":"arm64","channel":"stable"},{"arch":"arm","channel":"stable"},{"arch":"x86","channel":"testing"},{"arch":"arm64","channel":"testing"},{"arch":"arm","channel":"testing"}]'
+            MATRIX_JSON='[{"arch":"x86","channel":"stable"},{"arch":"arm64","channel":"stable"},{"arch":"x86","channel":"long-term"},{"arch":"arm64","channel":"long-term"},{"arch":"x86","channel":"testing"},{"arch":"arm64","channel":"testing"}]'
+          fi
+          echo "BUILD_TIME=$BUILD_TIME" >> $GITHUB_OUTPUT
+          echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
+          echo "MATRIX_JSON=$MATRIX_JSON" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME: $BUILD_TIME"
+          echo "RELEASE: $RELEASE"
+          echo "MATRIX_JSON: $MATRIX_JSON"
+          
+  Patch_RouterOS:
+    needs: Set_Variables
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix: 
+        include: ${{ fromJSON(needs.Set_Variables.outputs.MATRIX_JSON) }}
+    env:
+      TZ: 'Asia/Shanghai'
+      BUILD_TIME: ${{ needs.Set_Variables.outputs.BUILD_TIME }}
+      RELEASE: ${{ needs.Set_Variables.outputs.RELEASE }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mkisofs xorriso qemu-utils extlinux --no-install-recommends
+        sudo pip install pefile
+        
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x' 
+
+    - name: Get latest routeros version
+      id: get_latest
+      run: |
+        echo $(uname -a)
+        echo Build Time:$BUILD_TIME
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            LATEST_VERSION="${{ github.event.inputs.version }}"
+          else
+            LATEST_VERSION=$(wget -nv -O - https://${{ env.MIKRO_UPGRADE_URL }}/routeros/NEWESTa7.${{ matrix.channel }} | cut -d ' ' -f1)
+          fi
+        else
+          LATEST_VERSION=$(wget -nv -O - https://${{ env.MIKRO_UPGRADE_URL }}/routeros/NEWESTa7.${{ matrix.channel }} | cut -d ' ' -f1)
+        fi
+        echo Latest Version:$LATEST_VERSION
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          _LATEST_VERSION=$(wget -nv -O - https://${{ env.CUSTOM_UPGRADE_URL }}/routeros/NEWESTa7.${{ matrix.channel }} | cut -d ' ' -f1)
+          if [ "$_LATEST_VERSION" == "$LATEST_VERSION" ]; then
+            echo "No new version found"
+            echo "has_new_version=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+        fi
+        echo "has_new_version=true" >> $GITHUB_OUTPUT
+        wget -nv -O CHANGELOG https://${{ env.MIKRO_UPGRADE_URL }}/routeros/$LATEST_VERSION/CHANGELOG
+        cat CHANGELOG
+        if [[ "${{ matrix.arch }}" == "arm64" ]]; then
+          echo "ARCH=-arm64" >> $GITHUB_ENV
+        elif [[ "${{ matrix.arch }}" == "arm" ]]; then
+          echo "ARCH=-arm" >> $GITHUB_ENV
+        else
+          echo "ARCH=" >> $GITHUB_ENV
+        fi
+        echo "LATEST_VERSION=${LATEST_VERSION}" >> $GITHUB_ENV
+        sudo apt-get update > /dev/null
+        
+    - name: Get loader patch files
+      if: steps.get_latest.outputs.has_new_version == 'true'
+      run: |
+        wget -nv -O loader-${{ env.LATEST_VERSION }}.zip https://${{ env.LOADER_URL }}/loader-${{ env.LATEST_VERSION }}.zip
+        sudo apt-get install -y p7zip-full > /dev/null
+        7z x -p"${{ secrets.LOADER_PASSWORD }}" loader-${{ env.LATEST_VERSION }}.zip >> /dev/null
+        rm loader-${{ env.LATEST_VERSION }}.zip
+
+    - name: Cache mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
+      if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
+      id: cache_mikrotik
+      uses: actions/cache@v4
+      with:
+        path: mikrotik.iso
+        key: mikrotik-${{ env.LATEST_VERSION }}-${{ matrix.arch }}
+
+    - name: Get mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
+      if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_mikrotik.outputs.cache-hit != 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
+      run: |
+        sudo curl -s -o mikrotik.iso https://download.mikrotik.com/routeros/$LATEST_VERSION/mikrotik-$LATEST_VERSION$ARCH.iso
+
+    - name: Patch mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
+      if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
+      run: |
+        sudo mkdir iso
+        sudo mount -o loop,ro mikrotik.iso iso/
+        sudo mkdir new_iso
+        sudo cp -r iso/* new_iso/
+        sudo rsync -a iso/ new_iso/
+        sudo umount iso/
+        sudo rm -rf iso/
+        NPK_FILES=$(find new_iso/*.npk)
+        for file in $NPK_FILES; do
+          sudo -E python3 patch.py npk $file
+        done
+        sudo cp new_iso/routeros-$LATEST_VERSION*.npk routeros-$LATEST_VERSION$ARCH.npk
+        sudo mkdir efiboot
+        sudo mount -o loop new_iso/efiboot.img efiboot/
+        if [ "${{ matrix.arch }}" == "x86" ]; then
+          sudo -E python3 patch.py kernel efiboot/linux.x86_64
+          sudo cp efiboot/linux.x86_64 new_iso/isolinux/linux
+          sudo umount efiboot/
+          sudo mkisofs -o mikrotik-$LATEST_VERSION$ARCH.iso \
+                       -V "MikroTik $LATEST_VERSION $ARCH" \
+                       -sysid "" -preparer "MiKroTiK" \
+                       -publisher "" -A "MiKroTiK RouterOS" \
+                       -input-charset utf-8 \
+                       -b isolinux/isolinux.bin \
+                       -c isolinux/boot.cat \
+                       -no-emul-boot \
+                       -boot-load-size 4 \
+                       -boot-info-table \
+                       -eltorito-alt-boot \
+                       -e efiboot.img \
+                       -no-emul-boot \
+                       -R -J \
+                       new_iso/
+        elif [ "${{ matrix.arch }}" == "arm64" ]; then
+          sudo -E python3 patch.py kernel efiboot/EFI/BOOT/BOOTAA64.EFI
+          sudo umount efiboot/
+          sudo xorriso -as mkisofs -o mikrotik-$LATEST_VERSION$ARCH.iso \
+                       -V "MikroTik $LATEST_VERSION ${{ matrix.arch }}" \
+                       -sysid "" -preparer "MiKroTiK" \
+                       -publisher "" -A "MiKroTiK RouterOS" \
+                       -input-charset utf-8 \
+                       -b efiboot.img \
+                       -no-emul-boot \
+                       -R -J \
+                       new_iso/
+        fi
+        sudo rm -rf efiboot/
+        sudo mkdir all_packages_iso$ARCH-$LATEST_VERSION
+        sudo cp new_iso/*.npk all_packages_iso$ARCH-$LATEST_VERSION/
+        sudo rm -rf new_iso/
+        cd all_packages_iso$ARCH-$LATEST_VERSION/
+        sudo zip ../all_packages$ARCH-$LATEST_VERSION.zip *.npk
+        cd ../
+
+    - name: Cache refind
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      id: cache_refind
+      uses: actions/cache@v4
+      with:
+        path: refind-bin-0.14.2.zip
+        key: refind
+
+    - name: Get refind
+      if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_refind.outputs.cache-hit != 'true' && matrix.arch == 'x86'
+      run: |
+        sudo curl -s -o refind-bin-0.14.2.zip https://nchc.dl.sourceforge.net/project/refind/0.14.2/refind-bin-0.14.2.zip
+
+    - name: Cache install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      id: cache_install_image
+      uses: actions/cache@v4
+      with:
+        path: install-image.zip
+        key: install-image-${{ env.LATEST_VERSION }}-${{ matrix.arch }}
+
+    - name: Get install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_install_image.outputs.cache-hit != 'true' && matrix.arch == 'x86'
+      run: |
+        sudo curl -s -o install-image.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/install-image-$LATEST_VERSION.zip
+
+    - name: Patch install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.img
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      run: |
+        sudo unzip install-image.zip
+        sudo modprobe nbd
+        sudo qemu-nbd -c /dev/nbd0 -f raw install-image-$LATEST_VERSION.img
+        sudo mkdir install-image
+        sudo mount /dev/nbd0 install-image/
+        sudo unzip refind-bin-0.14.2.zip refind-bin-0.14.2/refind/refind_x64.efi
+        sudo cp refind-bin-0.14.2/refind/refind_x64.efi install-image/EFI/BOOT/BOOTX64.EFI
+        sudo rm -rf refind-bin-0.14.2
+        sudo -E python3 patch.py kernel install-image/linux
+        NPK_FILES=$(find install-image/*.npk)
+        for file in $NPK_FILES; do
+          sudo -E python3 patch.py npk $file
+        done
+        sudo umount /dev/nbd0
+        sudo qemu-nbd -d /dev/nbd0
+        sudo rm -rf install-image/
+
+        sudo qemu-img convert -f raw -O qcow2 install-image-$LATEST_VERSION$ARCH.img install-image-$LATEST_VERSION$ARCH.qcow2
+        sudo qemu-img convert -f raw -O vmdk install-image-$LATEST_VERSION$ARCH.img install-image-$LATEST_VERSION$ARCH.vmdk
+        sudo qemu-img convert -f raw -O vpc install-image-$LATEST_VERSION$ARCH.img install-image-$LATEST_VERSION$ARCH.vhd
+        sudo qemu-img convert -f raw -O vhdx install-image-$LATEST_VERSION$ARCH.img install-image-$LATEST_VERSION$ARCH.vhdx
+        sudo qemu-img convert -f raw -O vdi install-image-$LATEST_VERSION$ARCH.img install-image-$LATEST_VERSION$ARCH.vdi
+
+        sudo zip install-image-$LATEST_VERSION$ARCH.qcow2.zip install-image-$LATEST_VERSION$ARCH.qcow2
+        sudo zip install-image-$LATEST_VERSION$ARCH.vmdk.zip install-image-$LATEST_VERSION$ARCH.vmdk
+        sudo zip install-image-$LATEST_VERSION$ARCH.vhd.zip install-image-$LATEST_VERSION$ARCH.vhd
+        sudo zip install-image-$LATEST_VERSION$ARCH.vhdx.zip install-image-$LATEST_VERSION$ARCH.vhdx
+        sudo zip install-image-$LATEST_VERSION$ARCH.vdi.zip install-image-$LATEST_VERSION$ARCH.vdi
+        sudo zip install-image-$LATEST_VERSION$ARCH.img.zip install-image-$LATEST_VERSION$ARCH.img
+
+        sudo rm install-image-$LATEST_VERSION$ARCH.qcow2
+        sudo rm install-image-$LATEST_VERSION$ARCH.vmdk
+        sudo rm install-image-$LATEST_VERSION$ARCH.vhd
+        sudo rm install-image-$LATEST_VERSION$ARCH.vhdx
+        sudo rm install-image-$LATEST_VERSION$ARCH.vdi
+        sudo rm install-image-$LATEST_VERSION$ARCH.img
+
+    - name: Cache chr-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
+      id: cache_chr_img
+      uses: actions/cache@v4
+      with:
+        path: chr.img.zip
+        key: chr-${{ env.LATEST_VERSION }}-${{ matrix.arch }}
+
+    - name: Get chr-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_chr_img.outputs.cache-hit != 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
+      run: |
+        sudo curl -s -o chr.img.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/chr-$LATEST_VERSION$ARCH.img.zip
+
+    - name: Patch chr-${{ env.LATEST_VERSION }}${{ env.ARCH }}.img
+      if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
+      run: |
+        sudo unzip chr.img.zip
+        sudo modprobe nbd
+        sudo qemu-nbd -c /dev/nbd0 -f raw chr-$LATEST_VERSION$ARCH.img
+        sudo mkdir -p chr/{boot,routeros}
+        sudo mount /dev/nbd0p1 chr/boot/
+        if [ "${{ matrix.arch }}" == "x86" ]; then
+          sudo mkdir -p chr/boot/BOOT
+          sudo -E python3 patch.py kernel chr/boot/EFI/BOOT/BOOTX64.EFI
+          sudo extlinux --install -H 64 -S 32 chr/boot/BOOT
+          echo -e "default system\nlabel system\n\tkernel /EFI/BOOT/BOOTX64.EFI\n\tappend load_ramdisk=1 root=/dev/ram0 quiet" | sudo tee chr/boot/BOOT/syslinux.cfg > /dev/null
+        elif [ "${{ matrix.arch }}" == "arm64" ]; then
+          sudo -E python3 patch.py kernel chr/boot/EFI/BOOT/BOOTAA64.EFI
+        fi
+        sudo umount /dev/nbd0p1
+        sudo mount /dev/nbd0p2 chr/routeros/
+        sudo -E python3 patch.py npk chr/routeros/var/pdb/system/image
+        sudo umount /dev/nbd0p2
+        sudo rm -rf chr/
+        sudo qemu-nbd -d /dev/nbd0
+
+        sudo qemu-img convert -f raw -O qcow2 chr-$LATEST_VERSION$ARCH.img chr-$LATEST_VERSION$ARCH.qcow2
+        sudo qemu-img convert -f raw -O vmdk chr-$LATEST_VERSION$ARCH.img chr-$LATEST_VERSION$ARCH.vmdk
+        sudo qemu-img convert -f raw -O vpc chr-$LATEST_VERSION$ARCH.img chr-$LATEST_VERSION$ARCH.vhd
+        sudo qemu-img convert -f raw -O vhdx chr-$LATEST_VERSION$ARCH.img chr-$LATEST_VERSION$ARCH.vhdx
+        sudo qemu-img convert -f raw -O vdi chr-$LATEST_VERSION$ARCH.img chr-$LATEST_VERSION$ARCH.vdi
+
+        sudo zip chr-$LATEST_VERSION$ARCH.qcow2.zip chr-$LATEST_VERSION$ARCH.qcow2
+        sudo zip chr-$LATEST_VERSION$ARCH.vmdk.zip chr-$LATEST_VERSION$ARCH.vmdk
+        sudo zip chr-$LATEST_VERSION$ARCH.vhd.zip chr-$LATEST_VERSION$ARCH.vhd
+        sudo zip chr-$LATEST_VERSION$ARCH.vhdx.zip chr-$LATEST_VERSION$ARCH.vhdx
+        sudo zip chr-$LATEST_VERSION$ARCH.vdi.zip chr-$LATEST_VERSION$ARCH.vdi
+        sudo zip chr-$LATEST_VERSION$ARCH.img.zip chr-$LATEST_VERSION$ARCH.img
+
+        sudo rm chr-$LATEST_VERSION$ARCH.qcow2
+        sudo rm chr-$LATEST_VERSION$ARCH.vmdk
+        sudo rm chr-$LATEST_VERSION$ARCH.vhd
+        sudo rm chr-$LATEST_VERSION$ARCH.vhdx
+        sudo rm chr-$LATEST_VERSION$ARCH.vdi
+        sudo rm chr-$LATEST_VERSION$ARCH.img
+
+    - name: Cache NetInstall ${{ env.LATEST_VERSION }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      id: cache_netinstall
+      uses: actions/cache@v4
+      with:
+        path: |
+          netinstall.zip
+          netinstall64.zip
+          netinstall.tar.gz
+        key: netinstall-${{ env.LATEST_VERSION }}
+
+    - name: Get netinstall ${{ env.LATEST_VERSION }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && steps.cache_netinstall.outputs.cache-hit != 'true'
+      run: |
+        sudo curl -s -o netinstall.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall-$LATEST_VERSION.zip
+        sudo curl -s -o netinstall64.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall64-$LATEST_VERSION.zip
+        sudo curl -s -o netinstall.tar.gz https://download.mikrotik.com/routeros/$LATEST_VERSION/netinstall-$LATEST_VERSION.tar.gz
+
+    - name: Patch netinstall ${{ env.LATEST_VERSION }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
+      run: |
+        sudo unzip netinstall.zip netinstall.exe
+        sudo -E python3 patch.py netinstall netinstall.exe
+        sudo zip netinstall-$LATEST_VERSION.zip netinstall.exe
+        sudo unzip netinstall64.zip netinstall64.exe
+        sudo -E python3 patch.py netinstall netinstall64.exe
+        sudo zip netinstall64-$LATEST_VERSION.zip netinstall64.exe
+        sudo tar -xvf netinstall.tar.gz
+        sudo -E python3 patch.py netinstall netinstall-cli
+        sudo tar -czvf netinstall-$LATEST_VERSION.tar.gz netinstall-cli
+
+    - name: Cache routeros-${{ env.LATEST_VERSION }}${{ env.ARCH }}.npk & all_packages${{ env.ARCH }}-${{ env.LATEST_VERSION }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch != 'x86'
+      id: cache_routeros_npk
+      uses: actions/cache@v4
+      with:
+        path: |
+          routeros-${{ env.LATEST_VERSION }}${{ env.ARCH }}.npk
+          all_packages${{ env.ARCH }}-${{ env.LATEST_VERSION }}.zip
+        key: routeros-${{ env.LATEST_VERSION }}-${{ matrix.arch }}
+
+    - name: Get routeros-${{ env.LATEST_VERSION }}${{ env.ARCH }}.npk & all_packages${{ env.ARCH }}-${{ env.LATEST_VERSION }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_routeros_npk.outputs.cache-hit != 'true' && matrix.arch != 'x86'
+      run: |
+        sudo curl -s -o routeros-$LATEST_VERSION$ARCH.npk https://download.mikrotik.com/routeros/$LATEST_VERSION/routeros-$LATEST_VERSION$ARCH.npk
+        sudo curl -s -o all_packages$ARCH-$LATEST_VERSION.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/all_packages$ARCH-$LATEST_VERSION.zip
+
+    - name: Patch routeros-${{ env.LATEST_VERSION }}${{ env.ARCH }}.npk & all_packages${{ env.ARCH }}-${{ env.LATEST_VERSION }}.zip
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch != 'x86'
+      run: |
+        sudo mkdir all_packages$ARCH-$LATEST_VERSION
+        sudo unzip all_packages$ARCH-$LATEST_VERSION.zip -d all_packages$ARCH-$LATEST_VERSION/
+        sudo -E python3 patch.py npk routeros-$LATEST_VERSION$ARCH.npk
+        NPK_FILES=$(find all_packages$ARCH-$LATEST_VERSION/*.npk)
+        for file in $NPK_FILES; do
+          sudo -E python3 npk.py sign $file $file
+        done
+        cd all_packages$ARCH-$LATEST_VERSION/
+        sudo zip ../all_packages$ARCH-$LATEST_VERSION.zip *.npk
+        cd ..
+
+
+    - name: Prepare for Upload
+      if: steps.get_latest.outputs.has_new_version == 'true' && env.RELEASE == 'true'
+      run: |
+        sudo mkdir -p ./publish/$LATEST_VERSION
+        sudo cp CHANGELOG ./publish/$LATEST_VERSION/
+        sudo cp ./all_packages_iso$ARCH-$LATEST_VERSION/*.npk ./publish/$LATEST_VERSION/
+        # sudo cp mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso ./publish/$LATEST_VERSION/ 2>/dev/null || true
+        # sudo cp chr-${{ env.LATEST_VERSION }}*.zip ./publish/$LATEST_VERSION/ 2>/dev/null || true
+        # sudo cp netinstall-${{ env.LATEST_VERSION }}.* ./publish/$LATEST_VERSION/ 2>/dev/null || true
+        # sudo cp install-image-${{ env.LATEST_VERSION }}.zip ./publish/$LATEST_VERSION/ 2>/dev/null || true
+        echo $LATEST_VERSION $BUILD_TIME | sudo tee ./publish/NEWESTa7.${{ matrix.channel }}
+        sudo ls -la
+
+    - name: Delete Release tag ${{ env.LATEST_VERSION }} ${{ env.ARCH }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && env.RELEASE == 'true'
+      run: |
+        sed -i "1i Build Time:$BUILD_TIME" CHANGELOG
+        HEADER="Authorization: token ${{ secrets.GITHUB_TOKEN }}"
+        RELEASE_INFO=$(curl -s -H "$HEADER" https://api.github.com/repos/${{ github.repository }}/releases/tags/$LATEST_VERSION$ARCH)
+        RELEASE_ID=$(echo $RELEASE_INFO | jq -r '.id')
+        echo "Release ID: $RELEASE_ID"
+        if [ "$RELEASE_ID" != "null" ]; then
+            curl -X DELETE -H "$HEADER" https://api.github.com/repos/${{ github.repository }}/git/refs/tags/$LATEST_VERSION$ARCH
+            echo "Tag $LATEST_VERSION$ARCH deleted successfully."
+            curl -X DELETE -H "$HEADER" https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID
+            echo "Release with tag $LATEST_VERSION$ARCH deleted successfully."
+        else
+            echo "Release not found for tag: $LATEST_VERSION)"
+        fi
+
+    - name: Create Release tag ${{ env.LATEST_VERSION }} ${{ env.ARCH }}
+      if: steps.get_latest.outputs.has_new_version == 'true' && env.RELEASE == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        name: "RouterOS ${{ env.LATEST_VERSION }} ${{ env.ARCH }}"
+        body_path: "CHANGELOG"
+        tag_name: ${{ env.LATEST_VERSION }}${{ env.ARCH }}
+        make_latest:  ${{ matrix.channel == 'stable'}} && ${{ matrix.arch == 'x86'}}
+        prerelease:  ${{ matrix.channel == 'testing' }}
+        files: |
+          mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
+          chr-${{ env.LATEST_VERSION }}*.zip
+          netinstall-${{ env.LATEST_VERSION }}.*
+          install-image-${{ env.LATEST_VERSION }}.img.zip
+          routeros-${{ env.LATEST_VERSION }}${{ env.ARCH }}.npk
+          all_packages-*-${{ env.LATEST_VERSION }}.zip
+          all_packages-${{ env.LATEST_VERSION }}.zip
+          
+    - name: Upload Files as Artifact (No Release)
+      if: steps.get_latest.outputs.has_new_version == 'true' && env.RELEASE == 'false'
+      uses: actions/upload-artifact@v4
+      with:
+        name: mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}
+        path: |
+          all_packages-*-${{ env.LATEST_VERSION }}.zip
+          all_packages-${{ env.LATEST_VERSION }}.zip
+          mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
+          chr-${{ env.LATEST_VERSION }}*.zip
