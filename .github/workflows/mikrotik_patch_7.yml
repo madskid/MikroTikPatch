@@ -247,7 +247,7 @@ jobs:
       if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_refind.outputs.cache-hit != 'true' && matrix.arch == 'x86'
       run: |
         
-        wget -O refind-bin-0.14.zip https://${{ env.LOADER_URL }}/uploads/refind-bin-0.14.zip
+        wget -O refind-bin-0.14.2.zip https://${{ env.LOADER_URL }}/uploads/refind-bin-0.14.2.zip
 
     - name: Cache install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
       if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
