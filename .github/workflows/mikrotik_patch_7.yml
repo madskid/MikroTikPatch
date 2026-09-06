@@ -320,7 +320,7 @@ jobs:
       run: |
         sudo unzip chr.img.zip
         sudo modprobe nbd
-        sudo qemu-nbd -c /dev/nbd0 -f raw chr-$LATEST_VERSION$ARCH.img
+        sudo qemu-nbd -c /dev/nbd0 -f raw chr-$LATEST_VERSION$ARCH-efi.img
         sudo mkdir -p chr/{boot,routeros}
         sudo mount /dev/nbd0p1 chr/boot/
         if [ "${{ matrix.arch }}" == "x86" ]; then
