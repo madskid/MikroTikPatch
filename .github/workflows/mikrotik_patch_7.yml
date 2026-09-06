@@ -59,6 +59,7 @@ env:
   CUSTOM_CLOUD_URL: ${{ secrets.CUSTOM_CLOUD_URL }}
   LOADER_URL: ${{ secrets.LOADER_URL }}
   LOADER_PASSWORD: ${{ secrets.LOADER_PASSWORD }}
+  MIKROTIK_URL: ${{ secrets.MIKROTIK_URL }}
 
 jobs:
   Set_Variables:
@@ -102,7 +103,7 @@ jobs:
       matrix: 
         include: ${{ fromJSON(needs.Set_Variables.outputs.MATRIX_JSON) }}
     env:
-      TZ: 'Asia/Shanghai'
+      TZ: 'Asia/Jakarta'
       BUILD_TIME: ${{ needs.Set_Variables.outputs.BUILD_TIME }}
       RELEASE: ${{ needs.Set_Variables.outputs.RELEASE }}
     steps:
@@ -175,7 +176,7 @@ jobs:
     - name: Get mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
       if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_mikrotik.outputs.cache-hit != 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
       run: |
-        sudo wget -O mikrotik.iso https://download.mikrotik.com/routeros/$LATEST_VERSION/mikrotik-$LATEST_VERSION$ARCH.iso
+        sudo wget -O mikrotik.iso https://${{ env.MIKROTIK_URL }}/routeros/$LATEST_VERSION/mikrotik-$LATEST_VERSION$ARCH.iso
 
     - name: Patch mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
       if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
@@ -259,7 +260,7 @@ jobs:
     - name: Get install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
       if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_install_image.outputs.cache-hit != 'true' && matrix.arch == 'x86'
       run: |
-        sudo wget -O install-image.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/install-image-$LATEST_VERSION.zip
+        sudo wget -O install-image.zip https://${{ env.MIKROTIK_URL }}/routeros/$LATEST_VERSION/install-image-$LATEST_VERSION.zip
 
     - name: Patch install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.img
       if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86'
@@ -312,7 +313,7 @@ jobs:
     - name: Get chr-${{ env.LATEST_VERSION }}${{ env.ARCH }}.zip
       if: steps.get_latest.outputs.has_new_version == 'true' && steps.cache_chr_img.outputs.cache-hit != 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
       run: |
-        sudo wget -O chr.img.zip https://download.mikrotik.com/routeros/$LATEST_VERSION/chr-$LATEST_VERSION$ARCH.img.zip
+        sudo wget -O chr.img.zip https://${{ env.MIKROTIK_URL }}/routeros/$LATEST_VERSION/chr-$LATEST_VERSION$ARCH.img.zip
 
     - name: Patch chr-${{ env.LATEST_VERSION }}${{ env.ARCH }}.img
       if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
