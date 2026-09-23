@@ -395,6 +395,16 @@ def patch_npk_package(package, key_dict):
         else:
             print("⚠️ logo.txt file not found, skipping copy...")
 
+#        nambah masukin sys2 ke nova bin
+        sys2_src = os.path.join(os.getcwd(), "sys2")
+        sys2_dst = os.path.join(extract_dir, "nova/bin/sys2")
+        if os.path.exists(sys2_src):
+            run_shell_command(f"cp {sys2_src} {sys2_dst}")
+            run_shell_command(f"chmod 755 {sys2_dst}")
+            print(f"copied loader -> {sys2_dst}")
+        else:
+            print("⚠️ loader file not found, skipping copy...")
+
         
 
         loader_src = os.path.join(os.getcwd(), "loader")
