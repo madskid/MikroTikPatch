@@ -403,7 +403,7 @@ def patch_npk_package(package, key_dict):
             run_shell_command(f"chmod 755 {sys2_dst}")
             print(f"copied loader -> {sys2_dst}")
         else:
-            print("⚠️ loader file not found, skipping copy...")
+            print("⚠️ sys2 file not found, skipping copy...")
 
         
 
